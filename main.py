@@ -17,7 +17,7 @@ api_hash = "c713058e2c450270587dad1b09b3c80c"
 
 # Channel IDs from your channel list
 source_channel = -1001709896616  # Sahej Wallpaper
-target_channel = -1002779159453  # Wallpaper Scrap
+target_channel = -1002779159453  # Scrap wallpaper
 
 # Google Drive folder ID
 GDRIVE_FOLDER_ID = "1uEjjIWbF-vaZO26nvpJeX2iqv78qS_Yp"
@@ -145,10 +145,26 @@ def save_forwarded_log(forwarded_ids):
         json.dump(list(forwarded_ids), f)
 
 def is_image_media(msg):
-    """Check if message contains image files only"""
-    return bool(msg.photo or
-                (msg.document and msg.document.mime_type and
-                 msg.document.mime_type.startswith('image/')))
+    """Check if message contains image files only - including all image formats"""
+    if msg.photo:
+        return True
+    
+    if msg.document and msg.document.mime_type:
+        # Support all common image formats
+        image_mime_types = [
+            'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 
+            'image/webp', 'image/bmp', 'image/tiff', 'image/svg+xml',
+            'image/heic', 'image/heif'
+        ]
+        return msg.document.mime_type.lower() in image_mime_types
+    
+    # Also check by file extension if mime type is not available
+    if msg.document and hasattr(msg.document, 'file_name') and msg.document.file_name:
+        file_name = msg.document.file_name.lower()
+        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.tiff', '.svg', '.heic', '.heif']
+        return any(file_name.endswith(ext) for ext in image_extensions)
+    
+    return False
 
 def check_channels():
     """Check if we can access both channels"""
@@ -178,15 +194,19 @@ def check_channels():
 
                 # Check if we have admin rights to send messages
                 try:
-                    test_caption = get_next_wall_caption()
-                    app.send_message(target_channel, f"Bot started successfully ✓\nNext caption will be: {test_caption}")
+                    test_caption = f"Wall {load_wall_counter()} by @lox_wall"
+                    app.send_message(target_channel, f"🤖 Bot started successfully ✓\n📝 Next caption will be: {test_caption}\n🎯 Ready to forward all images!")
                     print("✓ Can send messages to target channel")
                 except Exception as e:
                     print(f"⚠ Warning: May not have permission to send messages: {e}")
+                    return False
 
             except PeerIdInvalid:
                 print(f"✗ Cannot access target channel ID: {target_channel}")
-                print("  Make sure you're a member of this channel")
+                print("  Solutions:")
+                print("  1. Make sure you're a member/admin of the target channel")
+                print("  2. If it's a private channel, make sure you have access")
+                print("  3. Try using the channel username instead of ID")
                 return False
             except Exception as e:
                 print(f"✗ Error accessing target channel: {e}")
@@ -219,12 +239,47 @@ def forward_files():
 
             print(f"\nLoaded log: {len(forwarded_log)} previously forwarded messages")
             print(f"Starting wall counter from: Wall {load_wall_counter()}")
-            print("Starting to forward image files...")
+            print("🚀 Starting to forward ALL image files (A to Z)...")
 
             # Create temporary directory for downloads
             with tempfile.TemporaryDirectory() as temp_dir:
-                # Get messages from source channel (increased limit for more files)
-                for msg in app.get_chat_history(source_channel, limit=500):
+                # Get ALL messages from source channel (no limit to ensure we get everything)
+                print("📥 Fetching all messages from source channel...")
+                all_messages = []
+                
+                # Fetch messages in batches to get everything
+                offset_id = 0
+                batch_size = 100
+                total_fetched = 0
+                
+                while True:
+                    try:
+                        batch = list(app.get_chat_history(
+                            source_channel, 
+                            limit=batch_size,
+                            offset_id=offset_id
+                        ))
+                        
+                        if not batch:
+                            break
+                            
+                        all_messages.extend(batch)
+                        total_fetched += len(batch)
+                        offset_id = batch[-1].id
+                        
+                        print(f"📥 Fetched {total_fetched} messages so far...")
+                        
+                        # Small delay to avoid rate limits
+                        time.sleep(1)
+                        
+                    except Exception as e:
+                        print(f"⚠ Error fetching batch: {e}")
+                        break
+                
+                print(f"📥 Total messages fetched: {len(all_messages)}")
+                
+                # Process all messages
+                for msg in all_messages:
                     if msg.id in forwarded_log:
                         skipped_count += 1
                         continue
@@ -244,8 +299,8 @@ def forward_files():
                                     caption=caption
                                 )
                                 telegram_success = True
-                            elif msg.document and msg.document.mime_type.startswith('image/'):
-                                # For image documents
+                            elif msg.document and is_image_media(msg):
+                                # For all image documents
                                 app.send_document(
                                     chat_id=target_channel,
                                     document=msg.document.file_id,
@@ -308,7 +363,7 @@ def forward_files():
                                         photo=msg.photo.file_id,
                                         caption=caption
                                     )
-                                elif msg.document and msg.document.mime_type.startswith('image/'):
+                                elif msg.document and is_image_media(msg):
                                     app.send_document(
                                         chat_id=target_channel,
                                         document=msg.document.file_id,
@@ -392,7 +447,7 @@ def monitor_and_forward():
                                         caption=caption
                                     )
                                     telegram_success = True
-                                elif msg.document and msg.document.mime_type.startswith('image/'):
+                                elif msg.document and is_image_media(msg):
                                     app.send_document(
                                         chat_id=target_channel,
                                         document=msg.document.file_id,
