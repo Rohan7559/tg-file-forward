@@ -20,4 +20,4 @@ COPY . .
 RUN mkdir -p /app/sessions
 
 # Run the application
-CMD ["python", "tg-drive.py"]
+CMD ["python", "main.py"]
