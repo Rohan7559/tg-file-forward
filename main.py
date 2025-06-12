@@ -22,11 +22,34 @@ target_channel = -1002645515061  # Scrap channel
 # Google Drive folder ID
 GDRIVE_FOLDER_ID = "1uEjjIWbF-vaZO26nvpJeX2iqv78qS_Yp"
 
-# Log file to track forwarded messages
+# Log file to track forwarded messages and counter
 LOG_FILE = "forwarded_messages.json"
+COUNTER_FILE = "wall_counter.json"
 
 # Initialize the client with your existing session
 app = Client("forward_session", api_id=api_id, api_hash=api_hash)
+
+def load_wall_counter():
+    """Load the current wall counter"""
+    if os.path.exists(COUNTER_FILE):
+        try:
+            with open(COUNTER_FILE, 'r') as f:
+                return json.load(f).get('counter', 1)
+        except (json.JSONDecodeError, FileNotFoundError):
+            return 1
+    return 1
+
+def save_wall_counter(counter):
+    """Save the current wall counter"""
+    with open(COUNTER_FILE, 'w') as f:
+        json.dump({'counter': counter}, f)
+
+def get_next_wall_caption():
+    """Get the next wall caption with incremented counter"""
+    counter = load_wall_counter()
+    caption = f"Wall {counter} by @lox_wall"
+    save_wall_counter(counter + 1)
+    return caption
 
 def authenticate_google_drive():
     """Authenticate with Google Drive API using token.pickle"""
@@ -155,7 +178,8 @@ def check_channels():
 
                 # Check if we have admin rights to send messages
                 try:
-                    app.send_message(target_channel, "Bot started successfully ✓")
+                    test_caption = get_next_wall_caption()
+                    app.send_message(target_channel, f"Bot started successfully ✓\nNext caption will be: {test_caption}")
                     print("✓ Can send messages to target channel")
                 except Exception as e:
                     print(f"⚠ Warning: May not have permission to send messages: {e}")
@@ -194,6 +218,7 @@ def forward_files():
             gdrive_failed = 0
 
             print(f"\nLoaded log: {len(forwarded_log)} previously forwarded messages")
+            print(f"Starting wall counter from: Wall {load_wall_counter()}")
             print("Starting to forward image files...")
 
             # Create temporary directory for downloads
@@ -206,6 +231,9 @@ def forward_files():
 
                     if is_image_media(msg):
                         try:
+                            # Get dynamic caption
+                            caption = get_next_wall_caption()
+                            
                             # Copy the message to Telegram channel
                             telegram_success = False
                             if msg.photo:
@@ -213,7 +241,7 @@ def forward_files():
                                 app.send_photo(
                                     chat_id=target_channel,
                                     photo=msg.photo.file_id,
-                                    caption="by @lox_wall"
+                                    caption=caption
                                 )
                                 telegram_success = True
                             elif msg.document and msg.document.mime_type.startswith('image/'):
@@ -221,7 +249,7 @@ def forward_files():
                                 app.send_document(
                                     chat_id=target_channel,
                                     document=msg.document.file_id,
-                                    caption="by @lox_wall"
+                                    caption=caption
                                 )
                                 telegram_success = True
 
@@ -230,7 +258,7 @@ def forward_files():
                                 forwarded_log.add(msg.id)
 
                                 media_type = "photo" if msg.photo else "image document"
-                                print(f"✓ Sent {media_type} to Telegram (ID: {msg.id})")
+                                print(f"✓ Sent {media_type} to Telegram with caption: {caption} (ID: {msg.id})")
 
                                 # Upload to Google Drive if service is available
                                 if drive_service:
@@ -273,22 +301,23 @@ def forward_files():
                             time.sleep(e.value)
                             # Retry sending after flood wait
                             try:
+                                caption = get_next_wall_caption()
                                 if msg.photo:
                                     app.send_photo(
                                         chat_id=target_channel,
                                         photo=msg.photo.file_id,
-                                        caption="by @lox_wall"
+                                        caption=caption
                                     )
                                 elif msg.document and msg.document.mime_type.startswith('image/'):
                                     app.send_document(
                                         chat_id=target_channel,
                                         document=msg.document.file_id,
-                                        caption="by @lox_wall"
+                                        caption=caption
                                     )
 
                                 forwarded_count += 1
                                 forwarded_log.add(msg.id)
-                                print(f"✓ Sent message {msg.id} after flood wait")
+                                print(f"✓ Sent message {msg.id} after flood wait with caption: {caption}")
                             except Exception as retry_error:
                                 failed_count += 1
                                 print(f"✗ Failed to send message {msg.id} after retry: {retry_error}")
@@ -312,6 +341,7 @@ def forward_files():
             print(f"Successfully sent to Telegram: {forwarded_count} image files")
             print(f"Failed Telegram sends: {failed_count} files")
             print(f"Skipped (already processed): {skipped_count} files")
+            print(f"Current wall counter: Wall {load_wall_counter()}")
             if drive_service:
                 print(f"Successfully uploaded to Google Drive: {gdrive_uploaded} files")
                 print(f"Failed Google Drive uploads: {gdrive_failed} files")
@@ -350,27 +380,30 @@ def monitor_and_forward():
                     for msg in app.get_chat_history(source_channel, limit=10):
                         if msg.id not in forwarded_log and is_image_media(msg):
                             try:
+                                # Get dynamic caption
+                                caption = get_next_wall_caption()
+                                
                                 # Send to Telegram
                                 telegram_success = False
                                 if msg.photo:
                                     app.send_photo(
                                         chat_id=target_channel,
                                         photo=msg.photo.file_id,
-                                        caption="by @lox_wall"
+                                        caption=caption
                                     )
                                     telegram_success = True
                                 elif msg.document and msg.document.mime_type.startswith('image/'):
                                     app.send_document(
                                         chat_id=target_channel,
                                         document=msg.document.file_id,
-                                        caption="by @lox_wall"
+                                        caption=caption
                                     )
                                     telegram_success = True
 
                                 if telegram_success:
                                     forwarded_log.add(msg.id)
                                     save_forwarded_log(forwarded_log)
-                                    print(f"✓ Auto-sent new image file to Telegram (ID: {msg.id})")
+                                    print(f"✓ Auto-sent new image file to Telegram with caption: {caption} (ID: {msg.id})")
 
                                     # Upload to Google Drive
                                     if drive_service:
@@ -409,13 +442,17 @@ def monitor_and_forward():
 
 if __name__ == "__main__":
     print("🚀 Telegram Image File Forwarder with Google Drive Upload")
-    print("🔧 Running on Render - Automatic Mode")
-    print("=" * 55)
+    print("🔧 Running on Render - Automatic Mode with Dynamic Captions")
+    print("=" * 60)
 
     # Check if token.pickle exists
     if not os.path.exists('token.pickle'):
         print("⚠ Warning: token.pickle not found. Google Drive upload will be disabled.")
         print("Make sure token.pickle is in the same directory as this script.")
+
+    # Show current wall counter
+    current_counter = load_wall_counter()
+    print(f"📝 Current wall counter: Wall {current_counter}")
 
     # First, check if we can access both channels
     if not check_channels():
