@@ -17,7 +17,7 @@ api_hash = "c713058e2c450270587dad1b09b3c80c"
 
 # Channel IDs from your channel list
 source_channel = -1001709896616  # Sahej Wallpaper
-target_channel = -1002645515061  # Scrap channel
+target_channel = -1002779159453  # Wallpaper Scrap
 
 # Google Drive folder ID
 GDRIVE_FOLDER_ID = "1uEjjIWbF-vaZO26nvpJeX2iqv78qS_Yp"
