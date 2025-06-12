@@ -19,6 +19,10 @@ api_hash = "c713058e2c450270587dad1b09b3c80c"
 source_channel = -1001709896616  # Sahej Wallpaper
 target_channel = -1002779159453  # Scrap wallpaper
 
+# Alternative: Try using channel usernames instead of IDs
+# source_channel = "@sahej_wallpaper"  # Replace with actual username
+# target_channel = "@scrap_wallpaper"  # Replace with actual username
+
 # Google Drive folder ID
 GDRIVE_FOLDER_ID = "1uEjjIWbF-vaZO26nvpJeX2iqv78qS_Yp"
 
@@ -50,6 +54,82 @@ def get_next_wall_caption():
     caption = f"Wall {counter} by @lox_wall"
     save_wall_counter(counter + 1)
     return caption
+
+def get_channel_info(channel_id):
+    """Get detailed channel information and suggest fixes"""
+    with app:
+        try:
+            chat = app.get_chat(channel_id)
+            print(f"✓ Channel found: {chat.title}")
+            print(f"  Type: {chat.type}")
+            print(f"  ID: {chat.id}")
+            if hasattr(chat, 'username') and chat.username:
+                print(f"  Username: @{chat.username}")
+            print(f"  Members count: {getattr(chat, 'members_count', 'Unknown')}")
+            return chat
+        except PeerIdInvalid:
+            print(f"✗ Peer ID invalid for: {channel_id}")
+            return None
+        except Exception as e:
+            print(f"✗ Error getting channel info: {e}")
+            return None
+
+def fix_channel_access():
+    """Interactive function to help fix channel access issues"""
+    print("\n🔧 CHANNEL ACCESS TROUBLESHOOTING")
+    print("=" * 50)
+    
+    with app:
+        me = app.get_me()
+        print(f"Bot account: {me.first_name} (@{me.username if me.username else 'No username'})")
+        print(f"Bot ID: {me.id}")
+        
+        print("\n📋 Checking all accessible chats...")
+        
+        # Get all dialogs to see what channels the bot can access
+        accessible_channels = []
+        try:
+            for dialog in app.get_dialogs(limit=100):
+                if dialog.chat.type in ["channel", "supergroup"]:
+                    accessible_channels.append({
+                        'title': dialog.chat.title,
+                        'id': dialog.chat.id,
+                        'username': getattr(dialog.chat, 'username', None),
+                        'type': dialog.chat.type
+                    })
+        except Exception as e:
+            print(f"Error getting dialogs: {e}")
+        
+        if accessible_channels:
+            print(f"\n✅ Found {len(accessible_channels)} accessible channels/groups:")
+            for i, channel in enumerate(accessible_channels, 1):
+                username_part = f" (@{channel['username']})" if channel['username'] else ""
+                print(f"{i:2d}. {channel['title']}{username_part}")
+                print(f"    ID: {channel['id']} | Type: {channel['type']}")
+        else:
+            print("\n❌ No accessible channels found!")
+            
+        print("\n🎯 SOLUTIONS TO TRY:")
+        print("1. Join the target channel manually:")
+        print("   - Open Telegram app")
+        print("   - Search for the channel")
+        print("   - Join the channel")
+        print("   - Make sure the bot account is added as admin")
+        
+        print("\n2. Use channel username instead of ID:")
+        print("   - Find the channel's @username")
+        print("   - Replace the ID with '@username' in the code")
+        
+        print("\n3. Add bot to channel as admin:")
+        print("   - Go to channel settings")
+        print("   - Add the bot as administrator")
+        print("   - Give it permission to send messages")
+        
+        print("\n4. Verify channel IDs:")
+        print("   Current source channel ID:", source_channel)
+        print("   Current target channel ID:", target_channel)
+        
+        return accessible_channels
 
 def authenticate_google_drive():
     """Authenticate with Google Drive API using token.pickle"""
@@ -187,26 +267,53 @@ def check_channels():
                 print(f"✗ Error accessing source channel: {e}")
                 return False
 
-            # Check target channel
+            # Check target channel with more detailed error handling
             try:
                 target_chat = app.get_chat(target_channel)
                 print(f"✓ Target channel accessible: {target_chat.title}")
 
                 # Check if we have admin rights to send messages
                 try:
+                    # Try to get chat member info first
+                    try:
+                        member = app.get_chat_member(target_channel, me.id)
+                        print(f"✓ Bot status in target channel: {member.status}")
+                        
+                        # Check if bot has necessary permissions
+                        if member.status in ["administrator", "creator"]:
+                            print("✓ Bot has admin rights")
+                        elif member.status == "member":
+                            print("⚠ Bot is only a member, may not have send permissions")
+                        else:
+                            print(f"⚠ Bot status: {member.status}")
+                            
+                    except Exception as member_error:
+                        print(f"⚠ Could not check bot permissions: {member_error}")
+                    
+                    # Try to send a test message
                     test_caption = f"Wall {load_wall_counter()} by @lox_wall"
                     app.send_message(target_channel, f"🤖 Bot started successfully ✓\n📝 Next caption will be: {test_caption}\n🎯 Ready to forward all images!")
                     print("✓ Can send messages to target channel")
                 except Exception as e:
-                    print(f"⚠ Warning: May not have permission to send messages: {e}")
+                    print(f"✗ Cannot send messages to target channel: {e}")
+                    print("  This usually means:")
+                    print("  - Bot is not an admin in the channel")
+                    print("  - Bot doesn't have 'Send Messages' permission")
+                    print("  - Channel has restricted settings")
                     return False
 
             except PeerIdInvalid:
                 print(f"✗ Cannot access target channel ID: {target_channel}")
-                print("  Solutions:")
-                print("  1. Make sure you're a member/admin of the target channel")
-                print("  2. If it's a private channel, make sure you have access")
-                print("  3. Try using the channel username instead of ID")
+                print("  This error means:")
+                print("  - The channel ID is incorrect")
+                print("  - Bot has never interacted with this channel")
+                print("  - Bot is not a member of the channel")
+                print("  - Channel is private and bot doesn't have access")
+                
+                # Run the troubleshooting function
+                print("\n🔧 Running channel access troubleshooter...")
+                accessible_channels = fix_channel_access()
+                
                 return False
             except Exception as e:
                 print(f"✗ Error accessing target channel: {e}")
@@ -512,11 +619,13 @@ if __name__ == "__main__":
     # First, check if we can access both channels
     if not check_channels():
         print("\n❌ Cannot proceed - channel access issues detected!")
-        print("\nPossible solutions:")
-        print("1. Join both channels if you haven't already")
-        print("2. Verify the channel IDs are correct")
-        print("3. Make sure the channels are public or you have proper access")
-        print("4. Ensure you have permission to send messages in the target channel")
+        print("\n🔧 MANUAL STEPS TO FIX:")
+        print("1. Open Telegram and join the target channel manually")
+        print("2. Add your bot account to the target channel as an admin")
+        print("3. Give the bot 'Send Messages' permission")
+        print("4. Alternatively, use the channel's @username instead of the numeric ID")
+        print("\n💡 TIP: The troubleshooter above showed all channels your bot can access.")
+        print("Make sure your target channel is in that list!")
         sys.exit(1)
 
     # Auto-start with option 1 (batch forward) then switch to monitoring
