@@ -17,7 +17,7 @@ api_hash = "c713058e2c450270587dad1b09b3c80c"
 
 # Channel IDs from your channel list
 source_channel = -1001709896616  # Sahej Wallpaper
-target_channel = rjfieifidjej  # Scrap wallpaper
+target_channel = -1002779159453  # Scrap wallpaper
 
 # Alternative: Try using channel usernames instead of IDs
 # source_channel = "@sahej_wallpaper"  # Replace with actual username
