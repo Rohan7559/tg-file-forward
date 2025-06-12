@@ -20,4 +20,4 @@ COPY . .
 RUN mkdir -p /app/sessions
 
 # Run the application
-CMD ["python", "main.py"]
+CMD ["sh", "-c", "python app.py && python main.py"]
